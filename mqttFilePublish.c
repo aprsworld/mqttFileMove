@@ -33,6 +33,7 @@ static char mqtt_host[256];
 static char mqtt_topic[256];
 static char input_file_name[256];
 static char output_file_name[256];
+static char *mqtt_user_name,*mqtt_passwd;
 static int quiet_flag;
 static int outputDebug;
 static int disable_mqtt;
@@ -151,6 +152,9 @@ static struct mosquitto * _mosquitto_startup(void) {
 	mosq = mosquitto_new(clientid, true, 0);
 
 	if (mosq) {
+		if ( 0 != mosq,mqtt_user_name && 0 != mqtt_passwd ) {
+			mosquitto_username_pw_set(mosq,mqtt_user_name,mqtt_passwd);
+		}
 		mosquitto_connect_callback_set(mosq, connect_callback);
 
 		fprintf(stderr,"# connecting to MQTT server %s:%d\n",mqtt_host,mqtt_port);
@@ -252,12 +256,22 @@ enum arguments {
 	A_mqtt_host,
 	A_mqtt_topic,
 	A_mqtt_port,
+	A_mqtt_user_name,
+	A_mqtt_password,
 	A_quiet,
 	A_verbose,
 	A_disable_mqtt,
 	A_help,
 };
 
+char	*strsave(char *s )
+{
+char	*ret_val = 0;
+
+ret_val = malloc(strlen(s)+1);
+if ( 0 != ret_val) strcpy(ret_val,s);
+return ret_val;	
+}
 static void publish_packet(int packet_number,int packet_count,char *packet,int packet_len) {
 	struct json_object *jobj = json_object_new_object();
 	json_object_object_add(jobj,"topic",json_object_new_string(mqtt_topic));
@@ -323,6 +337,8 @@ int main(int argc, char **argv) {
 		        {"mqtt-host",                        1,                 0, A_mqtt_host },
 		        {"mqtt-topic",                       1,                 0, A_mqtt_topic },
 		        {"mqtt-port",                        1,                 0, A_mqtt_port },
+		        {"mqtt-user-name",                   1,                 0, A_mqtt_user_name },
+		        {"mqtt-passwd",                      1,                 0, A_mqtt_password },
 			{"disable-mqtt",                     no_argument,       0, A_disable_mqtt },
 			{"quiet",                            no_argument,       0, A_quiet },
 			{"verbose",                          no_argument,       0, A_verbose },
@@ -351,6 +367,12 @@ int main(int argc, char **argv) {
 			case A_mqtt_port:
 				mqtt_port = atoi(optarg);
 				break;
+			case A_mqtt_user_name:
+				mqtt_user_name = strsave(optarg);
+				break;
+			case A_mqtt_password:
+				mqtt_passwd = strsave(optarg);
+				break;
 			case A_verbose:
 				outputDebug=1;
 				fprintf(stderr,"# verbose (debugging) output to stderr enabled\n");
@@ -369,6 +391,8 @@ int main(int argc, char **argv) {
 				fprintf(stdout,"# --mqtt-topic\t\t\tmqtt topic\n");
 				fprintf(stdout,"# --mqtt-host\t\t\tmqtt host\n");
 				fprintf(stdout,"# --mqtt-port\t\t\tmqtt port(optional)\n");
+				fprintf(stdout,"# --mqtt-user-name\t\t\tmaybe required depending on system\n");
+				fprintf(stdout,"# --mqtt-passwd\t\t\tmaybe required depending on system\n");
 				fprintf(stdout,"# --verbose\t\t\tOutput verbose / debugging to stderr\n");
 				fprintf(stdout,"#\n");
 				fprintf(stdout,"# --help\t\t\tThis help message then exit\n");

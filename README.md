@@ -33,6 +33,9 @@ switch|Required/Optional|argument|description
 --input-file-name|REQUIRED|file name|file to be sent.  The path will striped on sending
 --mqtt-topic|REQUIRED|topic|mqtt topic
 --mqtt-host|REQUIRED|qualified host|mqtt host operating mqtt server
+--mqtt-user-name|maybe REQUIRED|user name|mqtt user name
+--mqtt-user-name|maybe REQUIRED|user name|mqtt user name
+--mqtt-passwd|maybe REQUIRED|user password|mqtt password
 --verbose|OPTIONAL|(none)|sets verbose mode
 --mqtt-port|OPTIONAL|number|default is 1883
 --disable-mqtt|OPTIONAL|(none)|prevents mqtt publishing
@@ -45,6 +48,8 @@ switch|Required/Optional|argument|description
 ---|---|---|---
 --mqtt-topic|REQUIRED|topic|mqtt topic More than one topic can be used
 --mqtt-host|REQUIRED|qualified host|mqtt host operating mqtt server
+--mqtt-user-name|maybe REQUIRED|user name|mqtt user name
+--mqtt-passwd|maybe REQUIRED|user password|mqtt password
 --log-dir|OPTIONAL|path to logging directory|default=logLocal
 --verbose|OPTIONAL|(none)|sets verbose mode
 --mqtt-port|OPTIONAL|number|default is 1883

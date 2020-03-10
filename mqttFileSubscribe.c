@@ -23,12 +23,14 @@
 #include <unistd.h>
 #include <string.h>
 #include <json.h>
+#include <json_tokener.h>
 #include <mosquitto.h>
 #include <time.h>
 
 static int mqtt_port=1883;
 static char mqtt_host[256];
 static char logDir[256]="logLocal";
+static char *mqtt_user_name,*mqtt_passwd;
 
 int outputDebug=0;
 #if 0
@@ -139,7 +141,7 @@ static int decode( FILE *infile, FILE *outfile )
 }
 
 
-char	*strsave(char *s )
+char	*strsave(const char *s )
 {
 char	*ret_val = 0;
 
@@ -266,101 +268,83 @@ static int run = 1;
 
 
 void connect_callback(struct mosquitto *mosq, void *obj, int result) {
+	if ( 5 == result ) {
+		fprintf(stderr,"# --mqtt-user-name and --mqtt-passwd required at this site.\n");
+	}
 	printf("# connect_callback, rc=%d\n", result);
 }
-static int  _get_int(const char *tag,const char *packet,int *dest ) {
-	char lookfor[64];
-	char buffer[3000 + 512];
-	char *p;
-	int rc;
-	strncpy(buffer,packet,sizeof(buffer));
-	snprintf(lookfor,sizeof(lookfor),"\"%s\":",tag);
-	p = strstr(buffer,tag);
-	rc = ( 0 == p );
-	if ( 0 != rc ) {
-		goto exit_now;
+
+json_object *parse_a_string(char *string ) {
+
+	json_object *jobj = NULL;
+	json_tokener *tok = json_tokener_new();
+	const char *mystring = string;
+	int stringlen = 0;
+	enum json_tokener_error jerr;
+	do {
+		stringlen = strlen(mystring);
+		jobj = json_tokener_parse_ex(tok, mystring, stringlen);
+	} while ((jerr = json_tokener_get_error(tok)) == json_tokener_continue);
+	if (jerr != json_tokener_success) {
+		fprintf(stderr, "Error: %s\n", json_tokener_error_desc(jerr));
+		// Handle errors, as appropriate for your application.
 	}
-	p += strlen(lookfor) -1;
-	/* p now points to the first character of the int */
-	*dest = atoi(p);
-
-	exit_now:
-	return	rc;
-
+	if (tok->char_offset < stringlen) {
+		// Handle extra characters after parsed object as desired.
+		// e.g. issue an error, parse another object from that point, etc...
+	}
+	return	jobj;
 }
-static int  _get_string(const char *tag,const char *packet,char **dest ) {
-	char lookfor[64];
-	char buffer[3000 + 512];
-	char *p,*q;
-	char *d;
-	int rc;
-	strncpy(buffer,packet,sizeof(buffer));
-	snprintf(lookfor,sizeof(lookfor),"\"%s\":\"",tag);
-	p = strstr(buffer,tag);
-	rc = ( 0 == p );
-	if ( 0 != rc ) {
-		goto exit_now;
-	}
-	p += strlen(lookfor) -1;
-	/* p now points to the first character of the string */
-	q = strchr(p,'"');
-	rc = ( 0 == q );
-	if ( 0 != rc ) {
-		goto exit_now;
-	}
-	d = calloc ( 1 + (q - p ) ,1);
-	rc = ( 0 == d );
-	if ( 0 != rc ) {
-		goto exit_now;
-	}
-	memcpy(d,p,(q - p));
-	*dest = d;
-
-	exit_now:
-	return	rc;
-
+char *memcpy_s(char *d, int dlen, char *s, int slen ) {
+	return	memcpy(d,s,( dlen < slen ) ? dlen : slen);
 }
 
 
 int parse_the_packet(char *payload, int payloadlen, char **topic, char ** inputFileName, char**outputFileName,
 	int *packetNumber, int *packetCount, char **packetData ) {
-	int rc;
+	char	buffer[1024] = {};;
 
-	// payload[payloadlen] = '\0';	/* make into string */
+	memcpy_s(buffer,sizeof(buffer),payload,payloadlen);
+	json_object *jobj = parse_a_string(buffer);
 
-	rc = _get_string("topic",payload,topic);
-	if ( 0 != rc ) {
-		goto exit_now;
+	if ( 0 == jobj ) {
+		fprintf(stderr,"# unable parse mqtt packet containing json\n");
+		return	1;
 	}
-
-	rc = _get_string("inputFileName",payload,inputFileName);
-	if ( 0 != rc ) {
-		goto exit_now;
+	json_object *tmp;	
+	if ( 0 == json_object_object_get_ex(jobj,"topic",&tmp)) {
+		return	1;
 	}
-
-	rc = _get_string("outputFileName",payload,outputFileName);
-	if ( 0 != rc ) {
-		goto exit_now;
+	*topic = strsave((const char *) json_object_get_string(tmp)); 
+	json_object_put(tmp);
+	if ( 0 == json_object_object_get_ex(jobj,"inputFileName",&tmp)) {
+		return	1;
 	}
-
-	rc = _get_int("packetNumber",payload,packetNumber);
-	if ( 0 != rc ) {
-		goto exit_now;
+	*inputFileName = strsave((const char *) json_object_get_string(tmp)); 
+	json_object_put(tmp);
+	if ( 0 == json_object_object_get_ex(jobj,"outputFileName",&tmp)) {
+		return	1;
 	}
-
-	rc = _get_int("packetCount",payload,packetCount);
-	if ( 0 != rc ) {
-		goto exit_now;
+	*outputFileName = strsave((const char *) json_object_get_string(tmp)); 
+	json_object_put(tmp);
+	if ( 0 == json_object_object_get_ex(jobj,"packetData",&tmp)) {
+		return	1;
 	}
-
-	rc = _get_string("packetData",payload,packetData);
-	if ( 0 != rc ) {
-		goto exit_now;
+	*packetData = strsave((const char *) json_object_get_string(tmp)); 
+	json_object_put(tmp);
+	if ( 0 == json_object_object_get_ex(jobj,"packetNumber",&tmp)) {
+		return	1;
 	}
+	*packetNumber = json_object_get_int(tmp);
+	json_object_put(tmp);
+	if ( 0 == json_object_object_get_ex(jobj,"packetCount",&tmp)) {
+		return	1;
+	}
+	*packetCount = json_object_get_int(tmp);
+	json_object_put(tmp);
 
-	exit_now:
-
-	return	rc;
+	json_object_put(jobj);
+	return	0;
 }
 static char * _build_the_name(char *topic,char *outputFileName) {
 	char buffer[256]  = {};
@@ -464,6 +448,9 @@ static int startup_mosquitto(void) {
 	mosq = mosquitto_new(clientid, true, 0);
 
 	if (mosq) {
+		if ( 0 != mosq,mqtt_user_name && 0 != mqtt_passwd ) {
+			mosquitto_username_pw_set(mosq,mqtt_user_name,mqtt_passwd);
+		}
 		mosquitto_connect_callback_set(mosq, connect_callback);
 		mosquitto_message_callback_set(mosq, message_callback);
 
@@ -504,6 +491,8 @@ enum arguments {
 	A_mqtt_host = 512,
 	A_mqtt_topic,
 	A_mqtt_port,
+	A_mqtt_user_name,
+	A_mqtt_password,
 	A_log_dir,
 	A_quiet,
 	A_verbose,
@@ -525,6 +514,8 @@ int main(int argc, char **argv) {
 		        {"mqtt-host",                        1,                 0, A_mqtt_host },
 		        {"mqtt-topic",                       1,                 0, A_mqtt_topic },
 		        {"mqtt-port",                        1,                 0, A_mqtt_port },
+		        {"mqtt-user-name",                   1,                 0, A_mqtt_user_name },
+		        {"mqtt-passwd",                      1,                 0, A_mqtt_password },
 			{"quiet",                            no_argument,       0, A_quiet, },
 			{"verbose",                          no_argument,       0, A_verbose, },
 		        {"help",                             no_argument,       0, A_help, },
@@ -547,6 +538,12 @@ int main(int argc, char **argv) {
 			case A_mqtt_port:
 				mqtt_port = atoi(optarg);
 				break;
+			case A_mqtt_user_name:
+				mqtt_user_name = strsave(optarg);
+				break;
+			case A_mqtt_password:
+				mqtt_passwd = strsave(optarg);
+				break;
 			case A_log_dir:	
 				strncpy(logDir,optarg,sizeof(logDir));
 				break;
@@ -558,6 +555,8 @@ int main(int argc, char **argv) {
 				fprintf(stdout,"# --mqtt-host\t\t\tmqtt-host is required\tREQUIRED\n");
 				fprintf(stdout,"# --mqtt-topic\t\t\tmqtt topic must be used at least once\n");
 				fprintf(stdout,"# --mqtt-port\t\t\tmqtt port\t\tOPTIONAL\n");
+				fprintf(stdout,"# --mqtt-user-name\t\t\tmaybe required depending on system\n");
+				fprintf(stdout,"# --mqtt-passwd\t\t\tmaybe required depending on system\n");
 				fprintf(stdout,"# --log-dir\t\t\tlogging directory, default=logLocal\n");
 				fprintf(stdout,"#\n");
 				fprintf(stdout,"# --help\t\t\tThis help message then exit\n");

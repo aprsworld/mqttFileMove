@@ -136,6 +136,9 @@ static int encode( FILE *infile, FILE *outfile, int linesize ) {
 }
 
 void connect_callback(struct mosquitto *mosq, void *obj, int result) {
+	if ( 5 == result ) {
+		fprintf(stderr,"# --mqtt-user-name and --mqtt-passwd required at this site.\n");
+	}
 	fprintf(stderr,"# connect_callback, rc=%d\n", result);
 }
 

@@ -72,8 +72,3 @@ any files sent will not be received.
 mqttFilePublish will exit after publishing the file.   The file can be of any type or size.   The file
 can be captured by mqttLogLocal but at this time mqttFileSubscribe has not been adapted for that purpose.
 
-## Known bugs
-
-mqttFileSubscribe the programmer Clare Jarvis does not know how to use a parse to turn appropriately formated
-text into json.   Therefore topics with '/' should be avoided.
-
